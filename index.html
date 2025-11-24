@@ -71,9 +71,15 @@
             z-index: 5;
         }
 
-        /* Classes utilitaires pour le HUD */
-        .hud-text {
-            text-shadow: 1px 1px 0 #000;
+        .hud-text { text-shadow: 1px 1px 0 #000; }
+        
+        /* Animation pour le nouveau record */
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .new-record {
+            animation: flash 1s infinite;
         }
     </style>
 </head>
@@ -115,7 +121,7 @@
                         <h1 id="highScoreDisplay" class="text-3xl font-bold font-mono text-amber-400 drop-shadow-lg leading-tight">0</h1>
                     </div>
                     
-                    <!-- Audio Button (Moved below record) -->
+                    <!-- Audio Button -->
                     <button id="audioBtn" class="mt-4 pointer-events-auto bg-slate-800/50 hover:bg-slate-700 p-2 rounded-full border border-white/10 transition-colors">
                         <div class="relative w-6 h-6">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -129,9 +135,38 @@
                 </div>
             </div>
 
+            <!-- GAME OVER SCREEN -->
+            <div id="gameOverScreen" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto z-30 bg-black/80 backdrop-blur-sm hidden">
+                <div class="text-center w-full max-w-sm px-6">
+                    <h2 class="text-4xl font-black text-red-500 mb-2 tracking-tighter uppercase" style="font-family: 'Black Ops One', cursive;">FIN DE MISSION</h2>
+                    
+                    <div class="bg-slate-800 border-2 border-slate-600 rounded-xl p-6 mb-6 shadow-2xl">
+                        <p class="text-slate-400 text-sm uppercase tracking-widest mb-1">Score Final</p>
+                        <h1 id="finalScore" class="text-6xl font-mono font-bold text-white mb-4">0</h1>
+                        
+                        <div id="newRecordBadge" class="hidden new-record bg-amber-500 text-black font-bold px-3 py-1 rounded inline-block text-sm uppercase tracking-wider mb-2">
+                            NOUVEAU RECORD !
+                        </div>
+                        <div id="noRecordBadge" class="text-slate-500 text-xs uppercase tracking-wide">
+                            Record actuel: <span id="currentRecordDisplay">0</span>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-3 w-full">
+                        <button id="btnReplay" class="btn-menu w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50 uppercase">
+                            REJOUER
+                        </button>
+                        
+                        <button id="btnReturnMenu" class="btn-menu w-full py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-lg border-l-4 border-slate-500 shadow-lg shadow-slate-900/50 uppercase">
+                            RETOUR AU MENU
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Menu Screen -->
             <div id="menuScreen" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto transition-opacity duration-300 z-20">
-                <!-- Logo Space (Canvas behind) -->
+                <!-- Logo Space -->
                 <div class="mt-[220px] flex flex-col gap-3 w-full max-w-xs px-6">
                     <button id="btnEasy" class="btn-menu w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50">
                         <div class="flex justify-between items-center px-2">
@@ -251,6 +286,7 @@
         const ctx = canvas.getContext('2d');
         const uiLayer = document.getElementById('ui-layer');
         const menuScreen = document.getElementById('menuScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
         const scoreDisplay = document.getElementById('scoreDisplay');
         const mineDisplay = document.getElementById('mineDisplay');
         const timeDisplay = document.getElementById('timeDisplay');
@@ -316,7 +352,9 @@
             if(container.clientWidth > 0) {
                 canvas.width = container.clientWidth;
                 canvas.height = container.clientHeight;
-                if (isGameOver) { drawMenuBackground(); }
+                if (isGameOver && gameOverScreen.classList.contains('hidden')) { 
+                    drawMenuBackground(); 
+                }
             }
         }
         window.addEventListener('resize', resize);
@@ -397,11 +435,11 @@
             scoreDisplay.textContent = '0';
             mineDisplay.textContent = '1';
             timeDisplay.textContent = '0s';
-            // Affiche le record correspondant au mode choisi
             highScoreDisplay.textContent = highScores[currentDifficulty];
 
             isGameOver = false;
             menuScreen.style.opacity = '0';
+            gameOverScreen.classList.add('hidden'); 
             setTimeout(() => menuScreen.style.display = 'none', 300);
             hud.style.opacity = '1';
 
@@ -420,22 +458,41 @@
             gameLoop(lastTime);
         }
 
+        function returnToMenu() {
+             gameOverScreen.classList.add('hidden');
+             menuScreen.style.display = 'flex';
+             setTimeout(() => {
+                 menuScreen.style.opacity = '1';
+                 drawMenuBackground();
+             }, 50);
+        }
+
         function gameOver() {
             isGameOver = true;
+            hud.style.opacity = '0';
             
-            // Sauvegarde du score si record battu
-            if (score > highScores[currentDifficulty]) {
+            let isNewRecord = false;
+            const currentRec = highScores[currentDifficulty];
+            
+            if (score > currentRec) {
                 highScores[currentDifficulty] = score;
                 localStorage.setItem(`crushmetal_hs_${currentDifficulty}`, score);
                 updateMenuHighScores();
+                isNewRecord = true;
             }
 
-            hud.style.opacity = '0';
-            menuScreen.style.display = 'flex';
-            setTimeout(() => {
-                menuScreen.style.opacity = '1';
-                drawMenuBackground();
-            }, 10);
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('currentRecordDisplay').textContent = highScores[currentDifficulty];
+            
+            if (isNewRecord) {
+                document.getElementById('newRecordBadge').classList.remove('hidden');
+                document.getElementById('noRecordBadge').classList.add('hidden');
+            } else {
+                document.getElementById('newRecordBadge').classList.add('hidden');
+                document.getElementById('noRecordBadge').classList.remove('hidden');
+            }
+
+            gameOverScreen.classList.remove('hidden');
         }
 
         function getSpeedMultiplier() {
@@ -456,7 +513,6 @@
                 attempts++;
             }
             
-            // VITESSE DE L'OR : BOOSTÉE à 220 pour tous les modes
             const goldSpeed = 220;
 
             foods.push({
@@ -700,6 +756,8 @@
         document.getElementById('btnEasy').addEventListener('click', function() { startGame('easy'); });
         document.getElementById('btnNormal').addEventListener('click', function() { startGame('normal'); });
         document.getElementById('btnHardcore').addEventListener('click', function() { startGame('hardcore'); });
+        document.getElementById('btnReplay').addEventListener('click', function() { startGame(currentDifficulty); });
+        document.getElementById('btnReturnMenu').addEventListener('click', returnToMenu);
 
         setTimeout(() => {
             resize();
@@ -709,4 +767,5 @@
     </script>
 </body>
 </html>
+```eof
 
