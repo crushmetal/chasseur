@@ -1,0 +1,565 @@
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sailor Ball Hunter - Survival</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f172a; /* Slate 900 */
+            touch-action: none; /* Empêche le scroll sur mobile */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+        }
+        /* Animation de pulsation pour le texte */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse-text {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- UI Overlay : Score & Start Screen -->
+    <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 z-10">
+        
+        <!-- Score Header -->
+        <div class="grid grid-cols-4 gap-2 w-full max-w-4xl mx-auto items-start">
+            <div class="text-left text-white">
+                <p class="text-[10px] md:text-xs text-slate-400 uppercase tracking-widest">Score</p>
+                <h1 id="scoreDisplay" class="text-2xl md:text-4xl font-bold font-mono text-emerald-400">0</h1>
+            </div>
+            <div class="text-center text-white">
+                <p class="text-[10px] md:text-xs text-slate-400 uppercase tracking-widest">Temps</p>
+                <h1 id="timeDisplay" class="text-xl md:text-2xl font-bold font-mono text-slate-200">0s</h1>
+            </div>
+            <!-- Compteur de Mines -->
+            <div class="text-center text-white">
+                <p class="text-[10px] md:text-xs text-slate-400 uppercase tracking-widest">Mines</p>
+                <h1 id="mineDisplay" class="text-xl md:text-2xl font-bold font-mono text-red-500">1</h1>
+            </div>
+            <div class="text-right text-white">
+                <p class="text-[10px] md:text-xs text-slate-400 uppercase tracking-widest">Record</p>
+                <h1 id="highScoreDisplay" class="text-xl md:text-2xl font-bold font-mono text-slate-200">0</h1>
+            </div>
+        </div>
+
+        <!-- Start / Game Over Screen -->
+        <div id="menuScreen" class="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm pointer-events-auto transition-opacity duration-300">
+            <div class="text-center max-w-md p-6 bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl">
+                <h1 id="menuTitle" class="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500 mb-4">
+                    SAILOR HUNTER
+                </h1>
+                <p id="menuText" class="text-slate-300 mb-8 text-lg">
+                    <span class="text-emerald-400 font-bold">Or</span> : Réapparaît <span class="underline decoration-emerald-500">immédiatement</span> si 0.<br>
+                    <span class="text-red-500 font-bold">Mines</span> : +1 toutes les 3s.<br>
+                    <span class="text-sm text-slate-500 mt-2 block">Survivre devient de plus en plus dur...</span>
+                </p>
+                
+                <button id="startBtn" class="group relative px-8 py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-full transition-all hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/30 cursor-pointer">
+                    <span class="flex items-center gap-2 text-xl">
+                        JOUER
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </span>
+                </button>
+                
+                <div class="mt-6 text-sm text-slate-500 hidden md:block">
+                    Utilisez les flèches du clavier ou ZQSD
+                </div>
+                <div class="mt-6 text-sm text-slate-500 md:hidden pulse-text">
+                    Touchez l'écran pour diriger
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Controls Visual Feedback -->
+        <div id="mobileControls" class="pointer-events-auto md:hidden w-full h-48 relative opacity-50 hover:opacity-100 transition-opacity hidden">
+            <div class="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/30 text-sm font-bold tracking-widest uppercase">
+                Glissez pour bouger
+            </div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        // --- Configuration ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiLayer = document.getElementById('ui-layer');
+        const menuScreen = document.getElementById('menuScreen');
+        const menuTitle = document.getElementById('menuTitle');
+        const menuText = document.getElementById('menuText');
+        const startBtn = document.getElementById('startBtn');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const mineDisplay = document.getElementById('mineDisplay');
+        const mobileControls = document.getElementById('mobileControls');
+
+        // Game State
+        let animationId;
+        let lastTime = 0;
+        let score = 0;
+        let gameTime = 0;
+        let highScore = localStorage.getItem('snakeball_highscore') || 0;
+        let isGameOver = true;
+        
+        // Timers for spawning
+        let foodTimer = 0;
+        let enemyTimer = 0;
+
+        // Player
+        const player = {
+            x: 0,
+            y: 0,
+            radius: 16, 
+            speed: 300, 
+            color: '#34d399', 
+            vx: 0,
+            vy: 0,
+            angle: 0
+        };
+
+        // Entities
+        let foods = [];
+        let enemies = [];
+        let particles = []; 
+
+        // Inputs
+        const keys = {
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false,
+            w: false, s: false, a: false, d: false,
+            z: false, q: false 
+        };
+
+        // --- Initialisation ---
+        highScoreDisplay.textContent = highScore;
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (isGameOver) {
+                player.x = canvas.width / 2;
+                player.y = canvas.height / 2;
+            }
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- Logique du Jeu ---
+
+        function startGame() {
+            score = 0;
+            gameTime = 0;
+            scoreDisplay.textContent = '0';
+            timeDisplay.textContent = '0s';
+            mineDisplay.textContent = '1'; 
+            
+            foodTimer = 0; 
+            enemyTimer = 0;
+
+            isGameOver = false;
+            menuScreen.style.opacity = '0';
+            setTimeout(() => menuScreen.style.display = 'none', 300);
+            mobileControls.classList.remove('hidden');
+
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.vx = 0;
+            player.vy = 0;
+
+            foods = [];
+            enemies = [];
+            particles = [];
+            
+            // Setup initial : 3 Ors (réduit de 5), 1 Ennemi
+            for(let i = 0; i < 3; i++) {
+                spawnFood();
+            }
+            spawnEnemy();
+            
+            lastTime = performance.now();
+            cancelAnimationFrame(animationId);
+            gameLoop(lastTime);
+        }
+
+        function gameOver() {
+            isGameOver = true;
+            mobileControls.classList.add('hidden');
+            
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('snakeball_highscore', highScore);
+                highScoreDisplay.textContent = highScore;
+                menuTitle.textContent = "LÉGENDE DES MERS !";
+            } else {
+                menuTitle.textContent = "NAUFRAGE...";
+            }
+
+            menuText.innerHTML = `Or : <span class="text-white font-bold">${score}</span> | Temps : <span class="text-white font-bold">${Math.floor(gameTime)}s</span><br>Mines évitées : <span class="text-red-500 font-bold">${enemies.length}</span>`;
+            startBtn.innerHTML = '<span class="flex items-center gap-2 text-xl">REJOUER</span>';
+            
+            menuScreen.style.display = 'flex';
+            setTimeout(() => menuScreen.style.opacity = '1', 10);
+        }
+
+        function getSpeedMultiplier() {
+            return 1 + (gameTime * 0.01) + (score * 0.02);
+        }
+
+        function spawnFood() {
+            if (foods.length >= 5) return;
+
+            const margin = 50;
+            const minDistance = 150; // Distance minimum entre deux pièces
+            const speedMultiplier = getSpeedMultiplier();
+            const baseSpeed = 80;
+
+            let fx, fy;
+            let validPosition = false;
+            let attempts = 0;
+
+            // Tentative de trouver une position qui n'est pas collée aux autres pièces
+            while (!validPosition && attempts < 15) {
+                fx = margin + Math.random() * (canvas.width - margin * 2);
+                fy = margin + Math.random() * (canvas.height - margin * 2);
+                
+                validPosition = true;
+                for (let other of foods) {
+                    const dist = Math.hypot(fx - other.x, fy - other.y);
+                    if (dist < minDistance) {
+                        validPosition = false;
+                        break;
+                    }
+                }
+                attempts++;
+            }
+
+            // Si on échoue après 15 essais (map trop pleine), on spawn quand même pour pas bloquer
+            
+            foods.push({
+                x: fx,
+                y: fy,
+                radius: 8,
+                vx: (Math.random() - 0.5) * baseSpeed * speedMultiplier,
+                vy: (Math.random() - 0.5) * baseSpeed * speedMultiplier,
+                color: '#fbbf24' 
+            });
+        }
+
+        function spawnEnemy() {
+            let ex, ey;
+            const safeZone = 150; 
+            
+            let attempts = 0;
+            do {
+                ex = Math.random() * canvas.width;
+                ey = Math.random() * canvas.height;
+                attempts++;
+            } while (Math.hypot(ex - player.x, ey - player.y) < safeZone && attempts < 10);
+
+            const speedMultiplier = getSpeedMultiplier(); 
+            const baseSpeed = 100; 
+
+            enemies.push({
+                x: ex,
+                y: ey,
+                radius: 12, 
+                vx: (Math.random() < 0.5 ? -1 : 1) * (baseSpeed * speedMultiplier),
+                vy: (Math.random() < 0.5 ? -1 : 1) * (baseSpeed * speedMultiplier),
+                color: '#ef4444' 
+            });
+            
+            if(mineDisplay) mineDisplay.textContent = enemies.length;
+        }
+
+        function createParticles(x, y, color) {
+            for (let i = 0; i < 8; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 300,
+                    vy: (Math.random() - 0.5) * 300,
+                    life: 1,
+                    color: color
+                });
+            }
+        }
+
+        function update(dt) {
+            gameTime += dt;
+            timeDisplay.textContent = Math.floor(gameTime) + 's';
+
+            // Règle spawn rapide or si 0
+            if (foods.length === 0) {
+                spawnFood();
+            }
+
+            foodTimer += dt;
+            if (foodTimer >= 5) {
+                spawnFood();
+                if (Math.random() < 0.3) {
+                    spawnFood();
+                }
+                foodTimer = 0;
+            }
+
+            enemyTimer += dt;
+            if (enemyTimer >= 3) {
+                spawnEnemy();
+                enemyTimer = 0;
+                
+                uiLayer.style.boxShadow = "inset 0 0 20px rgba(239, 68, 68, 0.2)";
+                setTimeout(() => uiLayer.style.boxShadow = "none", 200);
+            }
+
+            // Mouvement Joueur
+            let moveX = 0;
+            let moveY = 0;
+
+            if (keys.ArrowUp || keys.w || keys.z) moveY = -1;
+            if (keys.ArrowDown || keys.s) moveY = 1;
+            if (keys.ArrowLeft || keys.a || keys.q) moveX = -1;
+            if (keys.ArrowRight || keys.d) moveX = 1;
+
+            if (touchInput.active) {
+                const dx = touchInput.x - touchInput.originX;
+                const dy = touchInput.y - touchInput.originY;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 10) { 
+                    moveX = dx / dist;
+                    moveY = dy / dist;
+                }
+            }
+
+            if (moveX !== 0 || moveY !== 0) {
+                if (!touchInput.active) {
+                    const len = Math.hypot(moveX, moveY);
+                    moveX /= len;
+                    moveY /= len;
+                }
+                player.x += moveX * player.speed * dt;
+                player.y += moveY * player.speed * dt;
+                
+                if (moveX < -0.1) player.angle = Math.PI; 
+                else if (moveX > 0.1) player.angle = 0;   
+            }
+
+            // Collisions Murs
+            if (player.x < player.radius) player.x = player.radius;
+            if (player.x > canvas.width - player.radius) player.x = canvas.width - player.radius;
+            if (player.y < player.radius) player.y = player.radius;
+            if (player.y > canvas.height - player.radius) player.y = canvas.height - player.radius;
+
+            // Update Entités
+            const speedMultiplier = getSpeedMultiplier();
+
+            // Food
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const f = foods[i];
+                const currentSpeed = Math.hypot(f.vx, f.vy);
+                if (currentSpeed > 0) {
+                    const targetSpeed = 80 * speedMultiplier;
+                    f.vx = (f.vx / currentSpeed) * targetSpeed;
+                    f.vy = (f.vy / currentSpeed) * targetSpeed;
+                }
+                f.x += f.vx * dt;
+                f.y += f.vy * dt;
+
+                if (f.x < f.radius || f.x > canvas.width - f.radius) f.vx *= -1;
+                if (f.y < f.radius || f.y > canvas.height - f.radius) f.vy *= -1;
+
+                if (Math.hypot(player.x - f.x, player.y - f.y) < player.radius + f.radius) {
+                    score++;
+                    scoreDisplay.textContent = score;
+                    createParticles(f.x, f.y, f.color);
+                    foods.splice(i, 1);
+                }
+            }
+
+            // Enemies
+            for (let e of enemies) {
+                const currentSpeed = Math.hypot(e.vx, e.vy);
+                 if (currentSpeed > 0) {
+                    const targetSpeed = 100 * speedMultiplier;
+                    e.vx = Math.sign(e.vx) * targetSpeed;
+                    e.vy = Math.sign(e.vy) * targetSpeed;
+                }
+                e.x += e.vx * dt;
+                e.y += e.vy * dt;
+
+                if (e.x < e.radius || e.x > canvas.width - e.radius) e.vx *= -1;
+                if (e.y < e.radius || e.y > canvas.height - e.radius) e.vy *= -1;
+
+                if (Math.hypot(player.x - e.x, player.y - e.y) < player.radius + e.radius - 2) { 
+                    createParticles(player.x, player.y, '#ffdbac'); 
+                    gameOver();
+                }
+            }
+
+            // Particules
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.life -= dt * 2;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function drawSailor(ctx, x, y, radius, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            if (Math.abs(angle) > Math.PI / 2) { ctx.scale(-1, 1); }
+            const s = radius / 16;
+            ctx.scale(s, s);
+
+            // Ombre
+            ctx.beginPath(); ctx.ellipse(0, 14, 10, 3, 0, 0, Math.PI*2); ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
+            // Cou
+            ctx.fillStyle = '#f5d0b0'; ctx.fillRect(-6, 0, 12, 14);
+            // Col
+            ctx.fillStyle = '#1e3a8a'; ctx.beginPath(); ctx.moveTo(-10, 16); ctx.quadraticCurveTo(0, 8, 10, 16); ctx.lineTo(12, 16); ctx.lineTo(0, 16); ctx.fill();
+            // Tête
+            ctx.fillStyle = '#f5d0b0'; ctx.beginPath(); ctx.arc(0, -2, 12, 0, Math.PI * 2); ctx.fill();
+            // Moustache
+            ctx.fillStyle = '#374151'; ctx.beginPath(); ctx.moveTo(-6, 2); ctx.quadraticCurveTo(0, -1, 6, 2); ctx.quadraticCurveTo(8, 6, 4, 4); ctx.quadraticCurveTo(0, 5, -4, 4); ctx.quadraticCurveTo(-8, 6, -6, 2); ctx.fill();
+            // Nez
+            ctx.strokeStyle = '#eebfa1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(3, 0); ctx.stroke();
+            // Yeux
+            ctx.fillStyle = '#1f2937'; ctx.beginPath(); ctx.arc(3, -4, 1.5, 0, Math.PI * 2); ctx.arc(-3, -4, 1.5, 0, Math.PI * 2); ctx.fill();
+            // Chapeau
+            ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.ellipse(0, -10, 13, 6, 0, Math.PI, 0); ctx.lineTo(13, -8); ctx.lineTo(-13, -8); ctx.fill();
+            ctx.fillStyle = '#e2e8f0'; ctx.beginPath(); ctx.rect(-13, -10, 26, 4); ctx.fill();
+            ctx.fillStyle = '#1e3a8a'; ctx.beginPath(); ctx.arc(0, -12, 2, 0, Math.PI*2); ctx.fill();
+            // Cheveux
+            ctx.fillStyle = '#374151'; ctx.beginPath(); ctx.moveTo(-12, -6); ctx.quadraticCurveTo(-14, 0, -10, 4); ctx.lineTo(-9, -6); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(12, -6); ctx.quadraticCurveTo(14, 0, 10, 4); ctx.lineTo(9, -6); ctx.fill();
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Grille
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            const gridSize = 50;
+            ctx.beginPath();
+            for(let x=0; x<canvas.width; x+=gridSize) { ctx.moveTo(x,0); ctx.lineTo(x, canvas.height); }
+            for(let y=0; y<canvas.height; y+=gridSize) { ctx.moveTo(0,y); ctx.lineTo(canvas.width, y); }
+            ctx.stroke();
+
+            // Food
+            for (let f of foods) {
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
+                ctx.fillStyle = f.color; 
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.beginPath();
+                ctx.arc(f.x - 2, f.y - 2, 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = f.color;
+            }
+            ctx.shadowBlur = 0;
+
+            // Enemies
+            for (let e of enemies) {
+                ctx.beginPath();
+                ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+                ctx.fillStyle = e.color;
+                ctx.fill();
+                
+                ctx.strokeStyle = e.color;
+                ctx.lineWidth = 2;
+                for(let i=0; i<8; i++) {
+                    const ang = (Math.PI * 2 / 8) * i;
+                    const px = e.x + Math.cos(ang) * (e.radius + 4);
+                    const py = e.y + Math.sin(ang) * (e.radius + 4);
+                    ctx.beginPath();
+                    ctx.moveTo(e.x, e.y);
+                    ctx.lineTo(px, py);
+                    ctx.stroke();
+                }
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.beginPath();
+                ctx.arc(e.x - 3, e.y - 3, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            drawSailor(ctx, player.x, player.y, player.radius, player.angle);
+
+            for (let p of particles) {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (isGameOver) return;
+            const dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+            update(Math.min(dt, 0.1)); 
+            draw();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        startBtn.addEventListener('click', startGame);
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.key.toLowerCase())) {
+                keys[e.key] = true;
+                if(e.key.length === 1) keys[e.key.toLowerCase()] = true; 
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.key.toLowerCase())) {
+                keys[e.key] = false;
+                if(e.key.length === 1) keys[e.key.toLowerCase()] = false;
+            }
+        });
+
+        const touchInput = { active: false, originX: 0, originY: 0, x: 0, y: 0 };
+        window.addEventListener('touchstart', (e) => {
+            if(e.target === startBtn) return; 
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchInput.active = true;
+            touchInput.originX = touch.clientX;
+            touchInput.originY = touch.clientY;
+            touchInput.x = touch.clientX;
+            touchInput.y = touch.clientY;
+        }, {passive: false});
+        window.addEventListener('touchmove', (e) => {
+            if(!touchInput.active) return;
+            e.preventDefault(); 
+            const touch = e.touches[0];
+            touchInput.x = touch.clientX;
+            touchInput.y = touch.clientY;
+        }, {passive: false});
+        window.addEventListener('touchend', () => { touchInput.active = false; });
+
+        resize();
+        draw();
+    </script>
+</body>
+</html>
