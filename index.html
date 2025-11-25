@@ -12,7 +12,7 @@
             margin: 0;
             overflow: hidden;
             background-color: #000;
-            touch-action: none; /* Crucial pour mobile */
+            touch-action: none;
             font-family: 'Segoe UI', sans-serif;
             user-select: none;
             -webkit-user-select: none;
@@ -27,6 +27,12 @@
             overflow: hidden;
             background-color: #0f172a;
             border-bottom: 2px solid #334155;
+        }
+
+        /* Style spécifique PC : Plein écran sans bordure */
+        body.pc-mode #game-container {
+            border-bottom: none;
+            height: 100vh;
         }
 
         canvas {
@@ -47,6 +53,11 @@
             letter-spacing: 2px;
             z-index: 20;
             cursor: crosshair; 
+        }
+
+        /* Cacher la zone de pouce sur PC */
+        body.pc-mode #thumb-zone {
+            display: none;
         }
 
         .btn-menu {
@@ -87,7 +98,26 @@
     <div id="game-container">
         <div class="scanlines"></div>
         
-        <!-- UI Overlay -->
+        <!-- Platform Indicator -->
+        <div id="platformIndicator" class="absolute bottom-2 right-2 z-50 text-[10px] text-white/20 pointer-events-none uppercase tracking-widest">
+            Chargement...
+        </div>
+
+        <!-- Audio Button -->
+        <div class="absolute top-4 right-4 z-50">
+            <button id="audioBtn" class="pointer-events-auto bg-slate-800/80 hover:bg-slate-700 p-2 rounded-full border border-white/20 transition-colors shadow-lg">
+                <div class="relative w-6 h-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                    <div id="audioStrike" class="absolute top-0 left-0 w-full h-full flex items-center justify-center" style="display: flex;">
+                        <div class="w-full h-0.5 bg-red-500 rotate-45 box-border border-y border-black"></div>
+                    </div>
+                </div>
+            </button>
+        </div>
+
+        <!-- UI Overlay (Restored Container) -->
         <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col p-4 z-10">
             
             <!-- HUD (In Game) -->
@@ -101,7 +131,7 @@
                     </div>
                     <div class="mt-2">
                         <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Mines</p>
-                        <h1 id="mineDisplay" class="text-2xl font-bold font-mono text-red-500 drop-shadow-lg leading-tight">0</h1>
+                        <h1 id="mineDisplay" class="text-2xl font-bold font-mono text-red-500 drop-shadow-lg leading-tight">0<span class="text-sm text-slate-500" id="maxMinesDisplay">/20</span></h1>
                     </div>
                 </div>
 
@@ -114,23 +144,9 @@
                 </div>
 
                 <!-- Top Right: Record -->
-                <div class="absolute top-0 right-0 text-right flex flex-col items-end">
-                    <div>
-                        <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Record</p>
-                        <h1 id="highScoreDisplay" class="text-3xl font-bold font-mono text-amber-400 drop-shadow-lg leading-tight">0</h1>
-                    </div>
-                    
-                    <!-- Audio Button -->
-                    <button id="audioBtn" class="mt-4 pointer-events-auto bg-slate-800/50 hover:bg-slate-700 p-2 rounded-full border border-white/10 transition-colors">
-                        <div class="relative w-6 h-6">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                            </svg>
-                            <div id="audioStrike" class="absolute top-0 left-0 w-full h-full flex items-center justify-center">
-                                <div class="w-full h-0.5 bg-red-500 rotate-45"></div>
-                            </div>
-                        </div>
-                    </button>
+                <div class="absolute top-14 right-0 text-right">
+                    <p class="text-[10px] text-slate-400 uppercase tracking-widest leading-none">Record (<span id="recordTypeLabel">...</span>)</p>
+                    <h1 id="highScoreDisplay" class="text-3xl font-bold font-mono text-amber-400 drop-shadow-lg leading-tight">0</h1>
                 </div>
             </div>
 
@@ -165,7 +181,6 @@
 
             <!-- Menu Screen -->
             <div id="menuScreen" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto transition-opacity duration-300 z-20">
-                <!-- Logo Space -->
                 <div class="mt-[220px] flex flex-col gap-3 w-full max-w-xs px-6">
                     <button id="btnEasy" class="btn-menu w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl border-l-4 border-emerald-400 shadow-lg shadow-emerald-900/50">
                         <div class="flex justify-between items-center px-2">
@@ -204,560 +219,563 @@
     </div>
 
     <script>
-        /** AUDIO ENGINE **/
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        let audioCtx;
-        let musicPlaying = false;
-        let nextNoteTime = 0;
-        let noteIndex = 0;
-        let tempo = 115;
-        let timerID;
+        // Attendre que tout le HTML soit chargé avant d'exécuter le script
+        document.addEventListener('DOMContentLoaded', () => {
 
-        const bassLine = ['C2','C2', null, 'C2', 'G1','G1', 'A1', null, 'F1','F1', null, 'F1', 'G1','A#1', 'G1', 'F1'];
+            /** PLATFORM DETECTION & CONFIGURATION **/
+            const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
+            
+            const CONFIG = {
+                maxMines: isMobile ? 20 : 40,
+                storagePrefix: isMobile ? 'crushmetal_hs_mobile_' : 'crushmetal_hs_pc_'
+            };
 
-        function getFreq(note) {
-            if(!note) return 0;
-            const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-            const oct = parseInt(note.slice(-1));
-            const keyNumber = notes.indexOf(note.slice(0, -1));
-            return 440 * Math.pow(2, ((oct - 4) * 12 + (keyNumber - 9)) / 12);
-        }
-        
-        function playTone(freq, type, duration, time) {
-            if (!audioCtx || freq <= 0) return;
-            try {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = type;
-                osc.frequency.value = freq;
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                const now = time;
-                gain.gain.setValueAtTime(0.15, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-                osc.start(now);
-                osc.stop(now + duration);
-            } catch(e) {}
-        }
-
-        function scheduler() {
-            while (nextNoteTime < audioCtx.currentTime + 0.1) {
-                const bassNote = bassLine[noteIndex % bassLine.length];
-                if (bassNote) playTone(getFreq(bassNote), 'square', 0.2, nextNoteTime);
-                if (noteIndex % 2 === 0) playTone(8000, 'triangle', 0.05, nextNoteTime);
-                if (noteIndex % 8 === 0) {
-                     const leadNotes = ['C4', 'D#4', 'G4', 'F4'];
-                     const leadNote = leadNotes[Math.floor(noteIndex/8) % leadNotes.length];
-                     playTone(getFreq(leadNote), 'sawtooth', 0.4, nextNoteTime);
-                }
-                nextNoteTime += (60.0 / tempo / 4); 
-                noteIndex++;
-            }
-            timerID = window.setTimeout(scheduler, 25);
-        }
-
-        function initAudio() {
-            if (!audioCtx) { try { audioCtx = new AudioContext(); } catch(e) { return; } }
-            if (audioCtx.state === 'suspended') { audioCtx.resume(); }
-        }
-
-        function toggleAudio() {
-            initAudio();
-            if(!audioCtx) return;
-            if (musicPlaying) {
-                window.clearTimeout(timerID);
-                musicPlaying = false;
-                document.getElementById('audioStrike').style.display = 'flex';
+            if (!isMobile) {
+                document.body.classList.add('pc-mode');
+                document.getElementById('platformIndicator').textContent = "MODE PC";
+                document.getElementById('recordTypeLabel').textContent = "PC";
             } else {
-                nextNoteTime = audioCtx.currentTime + 0.1;
-                noteIndex = 0;
-                scheduler();
-                musicPlaying = true;
-                document.getElementById('audioStrike').style.display = 'none';
+                document.getElementById('platformIndicator').textContent = "MODE MOBILE";
+                document.getElementById('recordTypeLabel').textContent = "MOBILE";
             }
-        }
-        
-        document.getElementById('audioBtn').addEventListener('click', toggleAudio);
 
+            /** AUDIO ENGINE **/
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            let audioCtx;
+            let nextNoteTime = 0;
+            let noteIndex = 0;
+            let tempo = 115;
+            let timerID;
+            
+            let soundEnabled = localStorage.getItem('crushmetal_sound') !== 'false'; 
+            const strike = document.getElementById('audioStrike');
+            strike.style.display = soundEnabled ? 'none' : 'flex';
 
-        /** GAME ENGINE **/
-        const canvas = document.getElementById('gameCanvas');
-        // Optimization: alpha false removes transparency calculation, speeding up rendering
-        const ctx = canvas.getContext('2d', { alpha: false });
-        const uiLayer = document.getElementById('ui-layer');
-        const menuScreen = document.getElementById('menuScreen');
-        const gameOverScreen = document.getElementById('gameOverScreen');
-        const scoreDisplay = document.getElementById('scoreDisplay');
-        const mineDisplay = document.getElementById('mineDisplay');
-        const timeDisplay = document.getElementById('timeDisplay');
-        const highScoreDisplay = document.getElementById('highScoreDisplay');
-        const hud = document.getElementById('hud');
-        const container = document.getElementById('game-container');
+            const bassLine = ['C2','C2', null, 'C2', 'G1','G1', 'A1', null, 'F1','F1', null, 'F1', 'G1','A#1', 'G1', 'F1'];
 
-        const highScores = {
-            easy: localStorage.getItem('crushmetal_hs_easy') || 0,
-            normal: localStorage.getItem('crushmetal_hs_normal') || 0,
-            hardcore: localStorage.getItem('crushmetal_hs_hardcore') || 0
-        };
-
-        function updateMenuHighScores() {
-            document.querySelectorAll('.record-badge').forEach(badge => {
-                const mode = badge.getAttribute('data-mode');
-                badge.textContent = `Record: ${highScores[mode]}`;
-            });
-        }
-        updateMenuHighScores();
-
-        const DIFFICULTIES = {
-            easy: { 
-                goldSpawnRate: 2.5, 
-                mineSpawnRate: 5.0,
-                baseMineSpeed: 40,
-                speedVariance: false,
-                playerSpeed: 290 // Boosted for responsiveness
-            },
-            normal: { 
-                goldSpawnRate: 5.0, 
-                mineSpawnRate: 3.0, 
-                baseMineSpeed: 100, 
-                speedVariance: false,
-                playerSpeed: 330 // Boosted
-            },
-            hardcore: { 
-                goldSpawnRate: 5.0, 
-                mineSpawnRate: 3.0, 
-                baseMineSpeed: 100, 
-                speedVariance: true,
-                playerSpeed: 330 // Boosted
+            function getFreq(note) {
+                if(!note) return 0;
+                const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                const oct = parseInt(note.slice(-1));
+                const keyNumber = notes.indexOf(note.slice(0, -1));
+                return 440 * Math.pow(2, ((oct - 4) * 12 + (keyNumber - 9)) / 12);
             }
-        };
-
-        let currentDifficulty = 'normal';
-        let animationId;
-        let lastTime = 0;
-        let score = 0;
-        let gameTime = 0;
-        let isGameOver = true;
-        let foodTimer = 0;
-        let enemyTimer = 0;
-
-        const player = { x: 0, y: 0, radius: 16, speed: 300, angle: 0 };
-        let foods = [];
-        let enemies = [];
-        let particles = []; 
-        const keys = { ArrowUp:false, ArrowDown:false, ArrowLeft:false, ArrowRight:false, w:false, s:false, a:false, d:false, z:false, q:false };
-
-        function resize() {
-            if(container.clientWidth > 0) {
-                canvas.width = container.clientWidth;
-                canvas.height = container.clientHeight;
-                if (isGameOver && gameOverScreen.classList.contains('hidden')) { 
-                    drawMenuBackground(); 
-                }
+            
+            function playTone(freq, type, duration, time) {
+                if (!soundEnabled || !audioCtx || freq <= 0) return;
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = type;
+                    osc.frequency.value = freq;
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    const now = time;
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+                    osc.start(now);
+                    osc.stop(now + duration);
+                } catch(e) {}
             }
-        }
-        window.addEventListener('resize', resize);
 
-        // --- DRAWING ---
-        function drawElephantLogo(ctx, cx, cy) {
-            ctx.save();
-            ctx.translate(cx, cy);
-            const scale = Math.min(canvas.width, canvas.height) / 600;
-            ctx.scale(scale, scale);
-            ctx.beginPath();
-            ctx.moveTo(0, -120); ctx.lineTo(110, -70); ctx.lineTo(110, 60); ctx.lineTo(0, 130); ctx.lineTo(-110, 60); ctx.lineTo(-110, -70);
-            ctx.closePath();
-            ctx.fillStyle = '#1e293b'; ctx.fill();
-            ctx.lineWidth = 6; ctx.strokeStyle = '#475569'; ctx.stroke();
-            ctx.fillStyle = '#94a3b8';
-            ctx.beginPath(); ctx.moveTo(-60, -50); ctx.lineTo(-140, -90); ctx.lineTo(-130, 10); ctx.lineTo(-60, 40); ctx.fill(); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(60, -50); ctx.lineTo(140, -90); ctx.lineTo(130, 10); ctx.lineTo(60, 40); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = '#cbd5e1';
-            ctx.beginPath(); ctx.moveTo(-60, -60); ctx.lineTo(60, -60); ctx.lineTo(50, 40); ctx.lineTo(20, 90); ctx.lineTo(-20, 90); ctx.lineTo(-50, 40); ctx.closePath(); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(-20, 60); ctx.bezierCurveTo(-20, 130, 40, 130, 40, 80); ctx.lineTo(20, 80); ctx.bezierCurveTo(20, 110, 0, 110, 0, 60); ctx.fill();
-            ctx.fillStyle = '#f8fafc';
-            ctx.beginPath(); ctx.moveTo(-30, 60); ctx.quadraticCurveTo(-50, 110, -90, 90); ctx.lineTo(-35, 50); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(30, 60); ctx.quadraticCurveTo(50, 110, 90, 90); ctx.lineTo(35, 50); ctx.fill();
-            ctx.fillStyle = '#ef4444';
-            ctx.beginPath(); ctx.moveTo(-40, -20); ctx.lineTo(-10, -10); ctx.lineTo(-40, 0); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(40, -20); ctx.lineTo(10, -10); ctx.lineTo(40, 0); ctx.fill();
-            ctx.font = '900 60px "Arial Black", "Segoe UI", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillStyle = '#fff';
-            ctx.fillText("CRUSHMETAL", 0, 190);
-            ctx.font = 'bold 18px monospace';
-            ctx.fillStyle = '#ef4444';
-            ctx.fillText("ELEPHANT HUNTER", 0, 220);
-            ctx.restore();
-        }
-
-        function drawMenuBackground() {
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 2;
-            const r = 40;
-            const h = r * Math.sqrt(3);
-            for(let y=-h; y<canvas.height+h; y+=h) {
-                for(let x=-r; x<canvas.width+r; x+=r*3) {
-                    ctx.beginPath();
-                    for(let i=0; i<6; i++) {
-                        const ang = i * Math.PI / 3;
-                        ctx.lineTo(x + r*Math.cos(ang), y + r*Math.sin(ang));
+            function scheduler() {
+                if(!soundEnabled) return; 
+                while (nextNoteTime < audioCtx.currentTime + 0.1) {
+                    const bassNote = bassLine[noteIndex % bassLine.length];
+                    if (bassNote) playTone(getFreq(bassNote), 'square', 0.2, nextNoteTime);
+                    if (noteIndex % 2 === 0) playTone(8000, 'triangle', 0.05, nextNoteTime);
+                    if (noteIndex % 8 === 0) {
+                        const leadNotes = ['C4', 'D#4', 'G4', 'F4'];
+                        const leadNote = leadNotes[Math.floor(noteIndex/8) % leadNotes.length];
+                        playTone(getFreq(leadNote), 'sawtooth', 0.4, nextNoteTime);
                     }
-                    ctx.closePath(); ctx.stroke();
+                    nextNoteTime += (60.0 / tempo / 4); 
+                    noteIndex++;
+                }
+                timerID = window.setTimeout(scheduler, 25);
+            }
+
+            function initAudioContext() {
+                if (!audioCtx) { try { audioCtx = new AudioContext(); } catch(e) { return; } }
+                if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+            }
+
+            function toggleAudio() {
+                initAudioContext();
+                soundEnabled = !soundEnabled;
+                localStorage.setItem('crushmetal_sound', soundEnabled); 
+
+                if (soundEnabled) {
+                    strike.style.display = 'none';
+                    if(audioCtx) {
+                        nextNoteTime = audioCtx.currentTime + 0.1;
+                        noteIndex = 0;
+                        scheduler();
+                    }
+                } else {
+                    strike.style.display = 'flex';
+                    window.clearTimeout(timerID);
                 }
             }
-            drawElephantLogo(ctx, canvas.width/2, canvas.height/2 - 100);
-        }
-
-        // --- GAMEPLAY ---
-        function startGame(difficulty) {
-            initAudio();
-            if(!musicPlaying) toggleAudio();
-
-            currentDifficulty = difficulty;
-            const settings = DIFFICULTIES[currentDifficulty];
-
-            score = 0;
-            gameTime = 0;
-            foodTimer = 0; 
-            enemyTimer = 0;
-            player.speed = settings.playerSpeed;
             
-            scoreDisplay.textContent = '0';
-            mineDisplay.textContent = '1';
-            timeDisplay.textContent = '0s';
-            highScoreDisplay.textContent = highScores[currentDifficulty];
+            document.getElementById('audioBtn').addEventListener('click', toggleAudio);
 
-            isGameOver = false;
-            menuScreen.style.opacity = '0';
-            gameOverScreen.classList.add('hidden'); 
-            setTimeout(() => menuScreen.style.display = 'none', 300);
-            hud.style.opacity = '1';
 
-            player.x = canvas.width / 2;
-            player.y = canvas.height / 2;
-            
-            foods = [];
-            enemies = [];
-            particles = [];
-            
-            for(let i=0; i<3; i++) spawnFood();
-            spawnEnemy();
+            /** GAME ENGINE **/
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d', { alpha: false });
+            const uiLayer = document.getElementById('ui-layer');
+            const menuScreen = document.getElementById('menuScreen');
+            const gameOverScreen = document.getElementById('gameOverScreen');
+            const scoreDisplay = document.getElementById('scoreDisplay');
+            const mineDisplay = document.getElementById('mineDisplay');
+            const timeDisplay = document.getElementById('timeDisplay');
+            const highScoreDisplay = document.getElementById('highScoreDisplay');
+            const hud = document.getElementById('hud');
+            const container = document.getElementById('game-container');
 
-            lastTime = performance.now();
-            if(animationId) cancelAnimationFrame(animationId);
-            gameLoop(lastTime);
-        }
+            // Mettre à jour l'affichage max mines
+            document.getElementById('maxMinesDisplay').textContent = '/' + CONFIG.maxMines;
 
-        function returnToMenu() {
-             gameOverScreen.classList.add('hidden');
-             menuScreen.style.display = 'flex';
-             setTimeout(() => {
-                 menuScreen.style.opacity = '1';
-                 drawMenuBackground();
-             }, 50);
-        }
-
-        function gameOver() {
-            isGameOver = true;
-            hud.style.opacity = '0';
-            
-            let isNewRecord = false;
-            const currentRec = highScores[currentDifficulty];
-            
-            if (score > currentRec) {
-                highScores[currentDifficulty] = score;
-                localStorage.setItem(`crushmetal_hs_${currentDifficulty}`, score);
-                updateMenuHighScores();
-                isNewRecord = true;
+            function getHighScores() {
+                return {
+                    easy: localStorage.getItem(CONFIG.storagePrefix + 'easy') || 0,
+                    normal: localStorage.getItem(CONFIG.storagePrefix + 'normal') || 0,
+                    hardcore: localStorage.getItem(CONFIG.storagePrefix + 'hardcore') || 0
+                };
             }
+            let highScores = getHighScores();
 
-            document.getElementById('finalScore').textContent = score;
-            document.getElementById('currentRecordDisplay').textContent = highScores[currentDifficulty];
-            
-            if (isNewRecord) {
-                document.getElementById('newRecordBadge').classList.remove('hidden');
-                document.getElementById('noRecordBadge').classList.add('hidden');
-            } else {
-                document.getElementById('newRecordBadge').classList.add('hidden');
-                document.getElementById('noRecordBadge').classList.remove('hidden');
-            }
-
-            gameOverScreen.classList.remove('hidden');
-        }
-
-        function getSpeedMultiplier() {
-            return 1 + (gameTime * 0.01) + (score * 0.015);
-        }
-
-        function spawnFood() {
-            if (foods.length >= 5) return;
-            const margin = 50;
-            const minDistance = 100;
-            
-            let fx, fy, valid = false, attempts = 0;
-            while(!valid && attempts < 10) {
-                fx = margin + Math.random() * (canvas.width - margin * 2);
-                fy = margin + Math.random() * (canvas.height - margin * 2);
-                valid = true;
-                for(let f of foods) if(Math.hypot(fx-f.x, fy-f.y) < minDistance) valid = false;
-                attempts++;
-            }
-            
-            // VITESSE DE L'OR : RAPIDE (220)
-            const goldSpeed = 220;
-
-            foods.push({
-                x: fx, y: fy, radius: 8,
-                vx: (Math.random() - 0.5) * goldSpeed, 
-                vy: (Math.random() - 0.5) * goldSpeed,
-                color: '#fbbf24'
-            });
-        }
-
-        function spawnEnemy() {
-            const settings = DIFFICULTIES[currentDifficulty];
-            let ex, ey, attempts = 0;
-            const safeZone = 200;
-            do {
-                ex = Math.random() * canvas.width;
-                ey = Math.random() * canvas.height;
-                attempts++;
-            } while(Math.hypot(ex - player.x, ey - player.y) < safeZone && attempts < 10);
-
-            let speed = settings.baseMineSpeed;
-            let color = '#ef4444';
-
-            if (settings.speedVariance) {
-                const rand = Math.random();
-                if (rand < 0.33) { speed *= 0.5; color = '#991b1b'; }
-                else if (rand < 0.66) { speed *= 1.0; }
-                else { speed *= 1.6; color = '#fca5a5'; }
-            }
-            speed *= getSpeedMultiplier();
-
-            enemies.push({
-                x: ex, y: ey, radius: 12,
-                vx: (Math.random() < 0.5 ? -1 : 1) * speed, vy: (Math.random() < 0.5 ? -1 : 1) * speed,
-                color: color,
-            });
-            mineDisplay.textContent = enemies.length;
-        }
-
-        function createParticles(x, y, color) {
-            for(let i=0; i<8; i++) {
-                particles.push({
-                    x: x, y: y,
-                    vx: (Math.random()-0.5)*300, vy: (Math.random()-0.5)*300,
-                    life: 1, color: color
+            function updateMenuHighScores() {
+                highScores = getHighScores(); 
+                document.querySelectorAll('.record-badge').forEach(badge => {
+                    const mode = badge.getAttribute('data-mode');
+                    badge.textContent = `Record: ${highScores[mode]}`;
                 });
             }
-        }
+            updateMenuHighScores();
 
-        function update(dt) {
-            const settings = DIFFICULTIES[currentDifficulty];
-            gameTime += dt;
-            timeDisplay.textContent = Math.floor(gameTime) + 's';
+            const DIFFICULTIES = {
+                easy: { 
+                    goldSpawnRate: 2.5, mineSpawnRate: 5.0, baseMineSpeed: 40, speedVariance: false, playerSpeed: 290
+                },
+                normal: { 
+                    goldSpawnRate: 5.0, mineSpawnRate: 3.0, baseMineSpeed: 100, speedVariance: false, playerSpeed: 330
+                },
+                hardcore: { 
+                    goldSpawnRate: 5.0, mineSpawnRate: 3.0, baseMineSpeed: 100, speedVariance: true, playerSpeed: 330
+                }
+            };
 
-            if (foods.length === 0) spawnFood();
+            let currentDifficulty = 'normal';
+            let animationId;
+            let lastTime = 0;
+            let score = 0;
+            let gameTime = 0;
+            let isGameOver = true;
+            let foodTimer = 0;
+            let enemyTimer = 0;
 
-            foodTimer += dt;
-            if (foodTimer >= settings.goldSpawnRate) {
-                spawnFood();
-                foodTimer = 0;
+            const player = { x: 0, y: 0, radius: 16, speed: 300, angle: 0 };
+            let foods = [];
+            let enemies = [];
+            let particles = []; 
+            const keys = { ArrowUp:false, ArrowDown:false, ArrowLeft:false, ArrowRight:false, w:false, s:false, a:false, d:false, z:false, q:false };
+
+            function resize() {
+                if(container.clientWidth > 0) {
+                    canvas.width = container.clientWidth;
+                    canvas.height = container.clientHeight;
+                    if (isGameOver && gameOverScreen.classList.contains('hidden')) { 
+                        drawMenuBackground(); 
+                    }
+                }
+            }
+            window.addEventListener('resize', resize);
+
+            // --- DRAWING ---
+            function drawElephantLogo(ctx, cx, cy) {
+                ctx.save();
+                ctx.translate(cx, cy);
+                const scale = Math.min(canvas.width, canvas.height) / 600;
+                ctx.scale(scale, scale);
+                ctx.beginPath();
+                ctx.moveTo(0, -120); ctx.lineTo(110, -70); ctx.lineTo(110, 60); ctx.lineTo(0, 130); ctx.lineTo(-110, 60); ctx.lineTo(-110, -70);
+                ctx.closePath();
+                ctx.fillStyle = '#1e293b'; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = '#475569'; ctx.stroke();
+                ctx.fillStyle = '#94a3b8';
+                ctx.beginPath(); ctx.moveTo(-60, -50); ctx.lineTo(-140, -90); ctx.lineTo(-130, 10); ctx.lineTo(-60, 40); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(60, -50); ctx.lineTo(140, -90); ctx.lineTo(130, 10); ctx.lineTo(60, 40); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#cbd5e1';
+                ctx.beginPath(); ctx.moveTo(-60, -60); ctx.lineTo(60, -60); ctx.lineTo(50, 40); ctx.lineTo(20, 90); ctx.lineTo(-20, 90); ctx.lineTo(-50, 40); ctx.closePath(); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(-20, 60); ctx.bezierCurveTo(-20, 130, 40, 130, 40, 80); ctx.lineTo(20, 80); ctx.bezierCurveTo(20, 110, 0, 110, 0, 60); ctx.fill();
+                ctx.fillStyle = '#f8fafc';
+                ctx.beginPath(); ctx.moveTo(-30, 60); ctx.quadraticCurveTo(-50, 110, -90, 90); ctx.lineTo(-35, 50); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(30, 60); ctx.quadraticCurveTo(50, 110, 90, 90); ctx.lineTo(35, 50); ctx.fill();
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath(); ctx.moveTo(-40, -20); ctx.lineTo(-10, -10); ctx.lineTo(-40, 0); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(40, -20); ctx.lineTo(10, -10); ctx.lineTo(40, 0); ctx.fill();
+                ctx.font = '900 60px "Arial Black", "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText("CRUSHMETAL", 0, 190);
+                ctx.font = 'bold 18px monospace'; ctx.fillStyle = '#ef4444'; ctx.fillText("ELEPHANT HUNTER", 0, 220);
+                ctx.restore();
             }
 
-            enemyTimer += dt;
-            if (enemyTimer >= settings.mineSpawnRate) {
-                spawnEnemy();
+            function drawMenuBackground() {
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = '#1e293b';
+                ctx.lineWidth = 2;
+                const r = 40;
+                const h = r * Math.sqrt(3);
+                for(let y=-h; y<canvas.height+h; y+=h) {
+                    for(let x=-r; x<canvas.width+r; x+=r*3) {
+                        ctx.beginPath();
+                        for(let i=0; i<6; i++) {
+                            const ang = i * Math.PI / 3;
+                            ctx.lineTo(x + r*Math.cos(ang), y + r*Math.sin(ang));
+                        }
+                        ctx.closePath(); ctx.stroke();
+                    }
+                }
+                drawElephantLogo(ctx, canvas.width/2, canvas.height/2 - 100);
+            }
+
+            function startGame(difficulty) {
+                initAudioContext();
+                if(soundEnabled) {
+                    window.clearTimeout(timerID);
+                    nextNoteTime = audioCtx.currentTime + 0.1;
+                    noteIndex = 0;
+                    scheduler();
+                }
+
+                currentDifficulty = difficulty;
+                const settings = DIFFICULTIES[currentDifficulty];
+
+                score = 0;
+                gameTime = 0;
+                foodTimer = 0; 
                 enemyTimer = 0;
-                uiLayer.style.boxShadow = "inset 0 0 20px rgba(239, 68, 68, 0.2)";
-                setTimeout(() => uiLayer.style.boxShadow = "none", 200);
-            }
-
-            // Mouvements
-            let moveX = 0, moveY = 0;
-            if (keys.ArrowUp || keys.z || keys.w) moveY = -1;
-            if (keys.ArrowDown || keys.s) moveY = 1;
-            if (keys.ArrowLeft || keys.q || keys.a) moveX = -1;
-            if (keys.ArrowRight || keys.d) moveX = 1;
-
-            if (touchInput.active) {
-                const dx = touchInput.x - touchInput.originX;
-                const dy = touchInput.y - touchInput.originY;
-                const dist = Math.hypot(dx, dy);
-                if (dist > 10) { moveX = dx/dist; moveY = dy/dist; }
-            }
-
-            if (moveX || moveY) {
-                if (!touchInput.active) {
-                    const len = Math.hypot(moveX, moveY);
-                    if(len>0) { moveX/=len; moveY/=len; }
-                }
-                player.x += moveX * player.speed * dt;
-                player.y += moveY * player.speed * dt;
-                if(moveX < -0.1) player.angle = Math.PI; else if(moveX > 0.1) player.angle = 0;
-            }
-
-            player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
-            player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
-
-            for (let i = foods.length - 1; i >= 0; i--) {
-                let f = foods[i];
-                f.x += f.vx * dt; f.y += f.vy * dt;
-                if(f.x < 0 || f.x > canvas.width) f.vx *= -1;
-                if(f.y < 0 || f.y > canvas.height) f.vy *= -1;
-
-                if (Math.hypot(player.x - f.x, player.y - f.y) < player.radius + f.radius) {
-                    score++;
-                    scoreDisplay.textContent = score;
-                    createParticles(f.x, f.y, f.color);
-                    foods.splice(i, 1);
-                }
-            }
-
-            for (let e of enemies) {
-                e.x += e.vx * dt; e.y += e.vy * dt;
-                if (e.x < e.radius || e.x > canvas.width - e.radius) e.vx *= -1;
-                if (e.y < e.radius || e.y > canvas.height - e.radius) e.vy *= -1;
-                if (Math.hypot(player.x - e.x, player.y - e.y) < player.radius + e.radius - 4) {
-                    createParticles(player.x, player.y, '#ffdbac');
-                    gameOver();
-                    return;
-                }
-            }
-
-            for (let i = particles.length - 1; i >= 0; i--) {
-                particles[i].x += particles[i].vx * dt;
-                particles[i].y += particles[i].vy * dt;
-                particles[i].life -= dt * 2;
-                if (particles[i].life <= 0) particles.splice(i, 1);
-            }
-        }
-
-        function drawSailor(ctx, x, y, radius, angle) {
-            ctx.save();
-            ctx.translate(x, y);
-            if (Math.abs(angle) > Math.PI / 2) { ctx.scale(-1, 1); }
-            const s = radius / 16;
-            ctx.scale(s, s);
-
-            // Pas de shadowBlur pour performance
-            ctx.beginPath(); ctx.ellipse(0, 14, 10, 3, 0, 0, Math.PI*2); ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
-            ctx.fillStyle = '#f5d0b0'; ctx.fillRect(-6, 0, 12, 14);
-            ctx.fillStyle = '#1e3a8a'; ctx.beginPath(); ctx.moveTo(-10, 16); ctx.quadraticCurveTo(0, 8, 10, 16); ctx.lineTo(12, 16); ctx.lineTo(0, 16); ctx.fill();
-            ctx.fillStyle = '#f5d0b0'; ctx.beginPath(); ctx.arc(0, -2, 12, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#374151'; ctx.beginPath(); ctx.moveTo(-6, 2); ctx.quadraticCurveTo(0, -1, 6, 2); ctx.quadraticCurveTo(8, 6, 4, 4); ctx.quadraticCurveTo(0, 5, -4, 4); ctx.quadraticCurveTo(-8, 6, -6, 2); ctx.fill();
-            ctx.strokeStyle = '#eebfa1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(3, 0); ctx.stroke();
-            ctx.fillStyle = '#1f2937'; ctx.beginPath(); ctx.arc(3, -4, 1.5, 0, Math.PI * 2); ctx.arc(-3, -4, 1.5, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.ellipse(0, -10, 13, 6, 0, Math.PI, 0); ctx.lineTo(13, -8); ctx.lineTo(-13, -8); ctx.fill();
-            ctx.fillStyle = '#e2e8f0'; ctx.beginPath(); ctx.rect(-13, -10, 26, 4); ctx.fill();
-            ctx.fillStyle = '#1e3a8a'; ctx.beginPath(); ctx.arc(0, -12, 2, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#374151'; ctx.beginPath(); ctx.moveTo(-12, -6); ctx.quadraticCurveTo(-14, 0, -10, 4); ctx.lineTo(-9, -6); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(12, -6); ctx.quadraticCurveTo(14, 0, 10, 4); ctx.lineTo(9, -6); ctx.fill();
-            ctx.restore();
-        }
-
-        function draw() {
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 1;
-            const gridSize = 50;
-            ctx.beginPath();
-            for(let x=0; x<canvas.width; x+=gridSize) { ctx.moveTo(x,0); ctx.lineTo(x, canvas.height); }
-            for(let y=0; y<canvas.height; y+=gridSize) { ctx.moveTo(0,y); ctx.lineTo(canvas.width, y); }
-            ctx.stroke();
-
-            for (let f of foods) {
-                ctx.beginPath(); ctx.arc(f.x, f.y, f.radius, 0, Math.PI*2);
-                ctx.fillStyle = f.color; ctx.fill();
-                // Pas de shadowBlur pour performance
-            }
-
-            for (let e of enemies) {
-                ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
-                ctx.fillStyle = e.color; ctx.fill();
+                player.speed = settings.playerSpeed;
                 
-                ctx.strokeStyle = e.color; ctx.lineWidth = 2;
-                for(let i=0; i<8; i++) {
-                    const ang = (Math.PI*2/8)*i + gameTime*2;
-                    const px = e.x + Math.cos(ang)*(e.radius+4);
-                    const py = e.y + Math.sin(ang)*(e.radius+4);
-                    ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(px, py); ctx.stroke();
+                scoreDisplay.textContent = '0';
+                mineDisplay.innerHTML = '1<span class="text-sm text-slate-500">/' + CONFIG.maxMines + '</span>';
+                timeDisplay.textContent = '0s';
+                highScoreDisplay.textContent = highScores[currentDifficulty];
+
+                isGameOver = false;
+                menuScreen.style.opacity = '0';
+                gameOverScreen.classList.add('hidden'); 
+                setTimeout(() => menuScreen.style.display = 'none', 300);
+                hud.style.opacity = '1';
+
+                player.x = canvas.width / 2;
+                player.y = canvas.height / 2;
+                
+                foods = [];
+                enemies = [];
+                particles = [];
+                
+                for(let i=0; i<3; i++) spawnFood();
+                spawnEnemy();
+
+                lastTime = performance.now();
+                if(animationId) cancelAnimationFrame(animationId);
+                gameLoop(lastTime);
+            }
+
+            function returnToMenu() {
+                gameOverScreen.classList.add('hidden');
+                menuScreen.style.display = 'flex';
+                setTimeout(() => {
+                    menuScreen.style.opacity = '1';
+                    drawMenuBackground();
+                }, 50);
+            }
+
+            function gameOver() {
+                isGameOver = true;
+                hud.style.opacity = '0';
+                window.clearTimeout(timerID); 
+                
+                let isNewRecord = false;
+                const currentRec = highScores[currentDifficulty];
+                
+                if (score > currentRec) {
+                    highScores[currentDifficulty] = score;
+                    localStorage.setItem(CONFIG.storagePrefix + currentDifficulty, score);
+                    updateMenuHighScores();
+                    isNewRecord = true;
                 }
-                ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(e.x-3, e.y-3, 4, 0, Math.PI*2); ctx.fill();
+
+                document.getElementById('finalScore').textContent = score;
+                document.getElementById('currentRecordDisplay').textContent = highScores[currentDifficulty];
+                
+                if (isNewRecord) {
+                    document.getElementById('newRecordBadge').classList.remove('hidden');
+                    document.getElementById('noRecordBadge').classList.add('hidden');
+                } else {
+                    document.getElementById('newRecordBadge').classList.add('hidden');
+                    document.getElementById('noRecordBadge').classList.remove('hidden');
+                }
+
+                gameOverScreen.classList.remove('hidden');
             }
 
-            drawSailor(ctx, player.x, player.y, player.radius, player.angle);
-
-            for (let p of particles) {
-                ctx.globalAlpha = p.life;
-                ctx.fillStyle = p.color;
-                ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
-                ctx.globalAlpha = 1;
+            function getSpeedMultiplier() {
+                return 1 + (gameTime * 0.01) + (score * 0.015);
             }
-        }
 
-        function gameLoop(timestamp) {
-            if (isGameOver) return;
-            const dt = (timestamp - lastTime) / 1000;
-            lastTime = timestamp;
-            update(Math.min(dt, 0.1));
-            draw();
-            animationId = requestAnimationFrame(gameLoop);
-        }
+            function spawnFood() {
+                if (foods.length >= 5) return;
+                const margin = 50;
+                const minDistance = 100;
+                
+                let fx, fy, valid = false, attempts = 0;
+                while(!valid && attempts < 10) {
+                    fx = margin + Math.random() * (canvas.width - margin * 2);
+                    fy = margin + Math.random() * (canvas.height - margin * 2);
+                    valid = true;
+                    for(let f of foods) if(Math.hypot(fx-f.x, fy-f.y) < minDistance) valid = false;
+                    attempts++;
+                }
+                const goldSpeed = 220;
+                foods.push({
+                    x: fx, y: fy, radius: 8,
+                    vx: (Math.random() - 0.5) * goldSpeed, vy: (Math.random() - 0.5) * goldSpeed, color: '#fbbf24'
+                });
+            }
 
-        // --- EVENTS ---
-        window.addEventListener('keydown', e => {
-            if(keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key] = true;
-            if(e.key.length===1) keys[e.key.toLowerCase()] = true;
-        });
-        window.addEventListener('keyup', e => {
-            if(keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key] = false;
-            if(e.key.length===1) keys[e.key.toLowerCase()] = false;
-        });
+            function spawnEnemy() {
+                if(enemies.length >= CONFIG.maxMines) return;
 
-        const touchInput = { active: false, originX: 0, originY: 0, x: 0, y: 0 };
-        
-        document.body.addEventListener('touchstart', e => {
-            if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn')) return;
+                const settings = DIFFICULTIES[currentDifficulty];
+                let ex, ey, attempts = 0;
+                const safeZone = 200;
+                do {
+                    ex = Math.random() * canvas.width;
+                    ey = Math.random() * canvas.height;
+                    attempts++;
+                } while(Math.hypot(ex - player.x, ey - player.y) < safeZone && attempts < 10);
+
+                let speed = settings.baseMineSpeed;
+                let color = '#ef4444';
+
+                if (settings.speedVariance) {
+                    const rand = Math.random();
+                    if (rand < 0.33) { speed *= 0.5; color = '#991b1b'; }
+                    else if (rand < 0.66) { speed *= 1.0; }
+                    else { speed *= 1.6; color = '#fca5a5'; }
+                }
+                speed *= getSpeedMultiplier();
+
+                enemies.push({
+                    x: ex, y: ey, radius: 12,
+                    vx: (Math.random() < 0.5 ? -1 : 1) * speed, vy: (Math.random() < 0.5 ? -1 : 1) * speed,
+                    color: color,
+                });
+                mineDisplay.innerHTML = `${enemies.length}<span class="text-sm text-slate-500">/${CONFIG.maxMines}</span>`;
+            }
+
+            function createParticles(x, y, color) {
+                for(let i=0; i<8; i++) {
+                    particles.push({
+                        x: x, y: y,
+                        vx: (Math.random()-0.5)*300, vy: (Math.random()-0.5)*300,
+                        life: 1, color: color
+                    });
+                }
+            }
+
+            function update(dt) {
+                const settings = DIFFICULTIES[currentDifficulty];
+                gameTime += dt;
+                timeDisplay.textContent = Math.floor(gameTime) + 's';
+
+                if (foods.length === 0) spawnFood();
+
+                foodTimer += dt;
+                if (foodTimer >= settings.goldSpawnRate) {
+                    spawnFood();
+                    foodTimer = 0;
+                }
+
+                enemyTimer += dt;
+                if (enemyTimer >= settings.mineSpawnRate) {
+                    spawnEnemy();
+                    enemyTimer = 0;
+                    if(enemies.length < CONFIG.maxMines) {
+                        uiLayer.style.boxShadow = "inset 0 0 20px rgba(239, 68, 68, 0.2)";
+                        setTimeout(() => uiLayer.style.boxShadow = "none", 200);
+                    }
+                }
+
+                let moveX = 0, moveY = 0;
+                if (keys.ArrowUp || keys.z || keys.w) moveY = -1;
+                if (keys.ArrowDown || keys.s) moveY = 1;
+                if (keys.ArrowLeft || keys.q || keys.a) moveX = -1;
+                if (keys.ArrowRight || keys.d) moveX = 1;
+
+                if (touchInput.active) {
+                    const dx = touchInput.x - touchInput.originX;
+                    const dy = touchInput.y - touchInput.originY;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 10) { moveX = dx/dist; moveY = dy/dist; }
+                }
+
+                if (moveX || moveY) {
+                    if (!touchInput.active) {
+                        const len = Math.hypot(moveX, moveY);
+                        if(len>0) { moveX/=len; moveY/=len; }
+                    }
+                    player.x += moveX * player.speed * dt;
+                    player.y += moveY * player.speed * dt;
+                    if(moveX < -0.1) player.angle = Math.PI; else if(moveX > 0.1) player.angle = 0;
+                }
+
+                player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+                player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+
+                for (let i = foods.length - 1; i >= 0; i--) {
+                    let f = foods[i];
+                    f.x += f.vx * dt; f.y += f.vy * dt;
+                    if(f.x < 0 || f.x > canvas.width) f.vx *= -1;
+                    if(f.y < 0 || f.y > canvas.height) f.vy *= -1;
+
+                    if (Math.hypot(player.x - f.x, player.y - f.y) < player.radius + f.radius) {
+                        score++;
+                        scoreDisplay.textContent = score;
+                        createParticles(f.x, f.y, f.color);
+                        foods.splice(i, 1);
+                    }
+                }
+
+                for (let e of enemies) {
+                    e.x += e.vx * dt; e.y += e.vy * dt;
+                    if (e.x < e.radius || e.x > canvas.width - e.radius) e.vx *= -1;
+                    if (e.y < e.radius || e.y > canvas.height - e.radius) e.vy *= -1;
+                    if (Math.hypot(player.x - e.x, player.y - e.y) < player.radius + e.radius - 4) {
+                        createParticles(player.x, player.y, '#ffdbac');
+                        gameOver();
+                        return;
+                    }
+                }
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    particles[i].x += particles[i].vx * dt;
+                    particles[i].y += particles[i].vy * dt;
+                    particles[i].life -= dt * 2;
+                    if (particles[i].life <= 0) particles.splice(i, 1);
+                }
+            }
+
+            function drawSailor(ctx, x, y, radius, angle) {
+                ctx.save();
+                ctx.translate(x, y);
+                if (Math.abs(angle) > Math.PI / 2) { ctx.scale(-1, 1); }
+                const s = radius / 16;
+                ctx.scale(s, s);
+                ctx.beginPath(); ctx.ellipse(0, 14, 10, 3, 0, 0, Math.PI*2); ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
+                ctx.fillStyle = '#f5d0b0'; ctx.fillRect(-6, 0, 12, 14);
+                ctx.fillStyle = '#1e3a8a'; ctx.beginPath(); ctx.moveTo(-10, 16); ctx.quadraticCurveTo(0, 8, 10, 16); ctx.lineTo(12, 16); ctx.lineTo(0, 16); ctx.fill();
+                ctx.fillStyle = '#f5d0b0'; ctx.beginPath(); ctx.arc(0, -2, 12, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#374151'; ctx.beginPath(); ctx.moveTo(-6, 2); ctx.quadraticCurveTo(0, -1, 6, 2); ctx.quadraticCurveTo(8, 6, 4, 4); ctx.quadraticCurveTo(0, 5, -4, 4); ctx.quadraticCurveTo(-8, 6, -6, 2); ctx.fill();
+                ctx.strokeStyle = '#eebfa1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(3, 0); ctx.stroke();
+                ctx.fillStyle = '#1f2937'; ctx.beginPath(); ctx.arc(3, -4, 1.5, 0, Math.PI * 2); ctx.arc(-3, -4, 1.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.ellipse(0, -10, 13, 6, 0, Math.PI, 0); ctx.lineTo(13, -8); ctx.lineTo(-13, -8); ctx.fill();
+                ctx.fillStyle = '#e2e8f0'; ctx.beginPath(); ctx.rect(-13, -10, 26, 4); ctx.fill();
+                ctx.fillStyle = '#1e3a8a'; ctx.beginPath(); ctx.arc(0, -12, 2, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#374151'; ctx.beginPath(); ctx.moveTo(-12, -6); ctx.quadraticCurveTo(-14, 0, -10, 4); ctx.lineTo(-9, -6); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(12, -6); ctx.quadraticCurveTo(14, 0, 10, 4); ctx.lineTo(9, -6); ctx.fill();
+                ctx.restore();
+            }
+
+            function draw() {
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = '#1e293b';
+                ctx.lineWidth = 1;
+                const gridSize = 50;
+                ctx.beginPath();
+                for(let x=0; x<canvas.width; x+=gridSize) { ctx.moveTo(x,0); ctx.lineTo(x, canvas.height); }
+                for(let y=0; y<canvas.height; y+=gridSize) { ctx.moveTo(0,y); ctx.lineTo(canvas.width, y); }
+                ctx.stroke();
+                for (let f of foods) {
+                    ctx.beginPath(); ctx.arc(f.x, f.y, f.radius, 0, Math.PI*2);
+                    ctx.fillStyle = f.color; ctx.fill();
+                }
+                for (let e of enemies) {
+                    ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
+                    ctx.fillStyle = e.color; ctx.fill();
+                    ctx.strokeStyle = e.color; ctx.lineWidth = 2;
+                    for(let i=0; i<8; i++) {
+                        const ang = (Math.PI*2/8)*i + gameTime*2;
+                        const px = e.x + Math.cos(ang)*(e.radius+4);
+                        const py = e.y + Math.sin(ang)*(e.radius+4);
+                        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(px, py); ctx.stroke();
+                    }
+                    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(e.x-3, e.y-3, 4, 0, Math.PI*2); ctx.fill();
+                }
+                drawSailor(ctx, player.x, player.y, player.radius, player.angle);
+                for (let p of particles) {
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            function gameLoop(timestamp) {
+                if (isGameOver) return;
+                const dt = (timestamp - lastTime) / 1000;
+                lastTime = timestamp;
+                update(Math.min(dt, 0.1));
+                draw();
+                animationId = requestAnimationFrame(gameLoop);
+            }
+
+            window.addEventListener('keydown', e => {
+                if(keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key] = true;
+                if(e.key.length===1) keys[e.key.toLowerCase()] = true;
+            });
+            window.addEventListener('keyup', e => {
+                if(keys.hasOwnProperty(e.key) || keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key] = false;
+                if(e.key.length===1) keys[e.key.toLowerCase()] = false;
+            });
+
+            const touchInput = { active: false, originX: 0, originY: 0, x: 0, y: 0 };
             
-            e.preventDefault();
-            const touch = e.touches[0];
-            touchInput.active = true;
-            touchInput.originX = touch.clientX;
-            touchInput.originY = touch.clientY;
-            touchInput.x = touch.clientX;
-            touchInput.y = touch.clientY;
-        }, {passive: false});
+            document.body.addEventListener('touchstart', e => {
+                if(e.target.closest('.btn-menu') || e.target.closest('#audioBtn')) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                touchInput.active = true;
+                touchInput.originX = touch.clientX;
+                touchInput.originY = touch.clientY;
+                touchInput.x = touch.clientX;
+                touchInput.y = touch.clientY;
+            }, {passive: false});
 
-        document.body.addEventListener('touchmove', e => {
-            if(!touchInput.active) return;
-            e.preventDefault();
-            const touch = e.touches[0];
-            touchInput.x = touch.clientX;
-            touchInput.y = touch.clientY;
-        }, {passive: false});
+            document.body.addEventListener('touchmove', e => {
+                if(!touchInput.active) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                touchInput.x = touch.clientX;
+                touchInput.y = touch.clientY;
+            }, {passive: false});
 
-        document.body.addEventListener('touchend', () => { touchInput.active = false; });
-        
-        document.getElementById('btnEasy').addEventListener('click', function() { startGame('easy'); });
-        document.getElementById('btnNormal').addEventListener('click', function() { startGame('normal'); });
-        document.getElementById('btnHardcore').addEventListener('click', function() { startGame('hardcore'); });
-        document.getElementById('btnReplay').addEventListener('click', function() { startGame(currentDifficulty); });
-        document.getElementById('btnReturnMenu').addEventListener('click', returnToMenu);
+            document.body.addEventListener('touchend', () => { touchInput.active = false; });
+            
+            document.getElementById('btnEasy').addEventListener('click', function() { startGame('easy'); });
+            document.getElementById('btnNormal').addEventListener('click', function() { startGame('normal'); });
+            document.getElementById('btnHardcore').addEventListener('click', function() { startGame('hardcore'); });
+            document.getElementById('btnReplay').addEventListener('click', function() { startGame(currentDifficulty); });
+            document.getElementById('btnReturnMenu').addEventListener('click', returnToMenu);
 
-        setTimeout(() => {
+            // Initialisation
             resize();
-            drawMenuBackground();
-        }, 100);
-
+            setTimeout(drawMenuBackground, 100);
+        });
     </script>
 </body>
 </html>
-```eof
-
