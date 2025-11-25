@@ -1,2 +1,2 @@
-# chasseur
-Jeu de type Pac-Snake
+# Sailor
+Jeux de capture de pièces
