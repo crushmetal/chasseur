@@ -2,8 +2,16 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Crushmetal - Sailor Hunter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Crushmetal</title>
+    
+    <!-- Les liens d'icônes seront remplis dynamiquement par le Javascript -->
+    <link id="favicon" rel="icon" type="image/png" href="">
+    <link id="appleicon" rel="apple-touch-icon" href="">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap');
@@ -52,6 +60,7 @@
             z-index: 20;
             cursor: crosshair; 
             border-top: 1px solid #333;
+            padding-bottom: env(safe-area-inset-bottom); /* Gestion iPhone X+ */
         }
 
         body.pc-mode #thumb-zone {
@@ -209,7 +218,30 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
 
-            /** PLATFORM CONFIG **/
+            /** GENERATION ICONE DYNAMIQUE **/
+            function generateAppIcon() {
+                // Création d'un canvas temporaire pour dessiner l'icône
+                const iconCanvas = document.createElement('canvas');
+                iconCanvas.width = 512;
+                iconCanvas.height = 512;
+                const ictx = iconCanvas.getContext('2d');
+
+                // Fond bleu foncé (theme)
+                ictx.fillStyle = '#0f172a';
+                ictx.fillRect(0, 0, 512, 512);
+
+                // Dessin du logo Elephant centré
+                drawElephantLogo(ictx, 256, 256);
+
+                // Conversion en image
+                const iconUrl = iconCanvas.toDataURL('image/png');
+
+                // Application aux balises meta
+                document.getElementById('favicon').href = iconUrl;
+                document.getElementById('appleicon').href = iconUrl;
+            }
+
+            /** PLATFORM DETECTION & CONFIGURATION **/
             const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
             
             const CONFIG = {
@@ -233,7 +265,7 @@
             let audioCtx;
             let nextNoteTime = 0;
             let noteIndex = 0;
-            let baseTempo = 128; // 128 BPM Standard moderne
+            let baseTempo = 128; 
             let currentTempo = baseTempo;
             let timerID;
             let totalMinesSpawned = 0;
@@ -242,7 +274,6 @@
             const strike = document.getElementById('audioStrike');
             strike.style.display = soundEnabled ? 'none' : 'flex';
 
-            // Pattern Synthwave / Electro
             const bassPattern = [0, 0, 3, 3, 5, 5, 3, 0]; 
             
             function getFreq(note, octave) {
@@ -411,8 +442,15 @@
             function drawElephantLogo(ctx, cx, cy) {
                 ctx.save();
                 ctx.translate(cx, cy);
-                const scale = Math.min(canvas.width, canvas.height) / 600;
-                ctx.scale(scale, scale);
+                // Augmenter un peu la taille pour l'icône aussi
+                const scale = Math.min(512, 512) / 600; // Référence 512 pour icône
+                // Mais en jeu on utilise canvas width/height
+                // On va utiliser une logique adaptative
+                const isIconGen = ctx.canvas.width === 512; // Hack detection context icone
+                const refSize = isIconGen ? 512 : Math.min(canvas.width, canvas.height);
+                
+                ctx.scale(refSize/600, refSize/600);
+
                 ctx.beginPath(); ctx.moveTo(0, -120); ctx.lineTo(110, -70); ctx.lineTo(110, 60); ctx.lineTo(0, 130); ctx.lineTo(-110, 60); ctx.lineTo(-110, -70); ctx.closePath(); ctx.fillStyle = '#1e293b'; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = '#475569'; ctx.stroke();
                 ctx.fillStyle = '#94a3b8'; ctx.beginPath(); ctx.moveTo(-60, -50); ctx.lineTo(-140, -90); ctx.lineTo(-130, 10); ctx.lineTo(-60, 40); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(60, -50); ctx.lineTo(140, -90); ctx.lineTo(130, 10); ctx.lineTo(60, 40); ctx.fill(); ctx.stroke();
                 ctx.fillStyle = '#cbd5e1'; ctx.beginPath(); ctx.moveTo(-60, -60); ctx.lineTo(60, -60); ctx.lineTo(50, 40); ctx.lineTo(20, 90); ctx.lineTo(-20, 90); ctx.lineTo(-50, 40); ctx.closePath(); ctx.fill();
@@ -420,13 +458,16 @@
                 ctx.fillStyle = '#f8fafc'; ctx.beginPath(); ctx.moveTo(-30, 60); ctx.quadraticCurveTo(-50, 110, -90, 90); ctx.lineTo(-35, 50); ctx.fill(); ctx.beginPath(); ctx.moveTo(30, 60); ctx.quadraticCurveTo(50, 110, 90, 90); ctx.lineTo(35, 50); ctx.fill();
                 ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(-40, -20); ctx.lineTo(-10, -10); ctx.lineTo(-40, 0); ctx.fill(); ctx.beginPath(); ctx.moveTo(40, -20); ctx.lineTo(10, -10); ctx.lineTo(40, 0); ctx.fill();
                 
-                ctx.font = '900 50px "Black Ops One", "Segoe UI", sans-serif'; 
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#fff';
-                ctx.shadowColor = 'rgba(0,0,0,0.8)';
-                ctx.shadowBlur = 10;
-                ctx.fillText("CRUSHMETAL GAME", 0, -150); 
-                ctx.shadowBlur = 0;
+                // Texte uniquement si on n'est pas en train de générer la petite icône (sinon illisible)
+                if(!isIconGen) {
+                    ctx.font = '900 50px "Black Ops One", "Segoe UI", sans-serif'; 
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#fff';
+                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                    ctx.shadowBlur = 10;
+                    ctx.fillText("CRUSHMETAL GAME", 0, -150); 
+                    ctx.shadowBlur = 0;
+                }
 
                 ctx.restore();
             }
@@ -434,6 +475,7 @@
             function drawMenuBackground() {
                 ctx.fillStyle = '#0f172a';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // Fond simple sans grille lourde
                 ctx.fillStyle = '#1e293b';
                 for(let i=0; i<50; i++) {
                     const x = Math.random() * canvas.width;
@@ -554,7 +596,6 @@
                 }
 
                 const settings = DIFFICULTIES[currentDifficulty];
-                // SAFE SPAWN LOGIC (MARGE DE 20px)
                 const margin = 20;
                 let ex, ey, attempts = 0;
                 const safeZone = 200;
@@ -637,7 +678,6 @@
                     let f = foods[i];
                     f.x += f.vx * dt; f.y += f.vy * dt;
                     
-                    // REBOND FOOD (ANTI-STICK)
                     if (f.x < f.radius) { f.x = f.radius; f.vx *= -1; }
                     else if (f.x > canvas.width - f.radius) { f.x = canvas.width - f.radius; f.vx *= -1; }
                     
@@ -655,7 +695,6 @@
                 for (let e of enemies) {
                     e.x += e.vx * dt; e.y += e.vy * dt;
                     
-                    // REBOND ENNEMI (ANTI-STICK)
                     if (e.x < e.radius) { e.x = e.radius; e.vx *= -1; }
                     else if (e.x > canvas.width - e.radius) { e.x = canvas.width - e.radius; e.vx *= -1; }
                     
@@ -806,9 +845,13 @@
             document.getElementById('btnReplay').addEventListener('click', function() { startGame(currentDifficulty); });
             document.getElementById('btnReturnMenu').addEventListener('click', returnToMenu);
 
+            // Generation Icone au lancement
+            generateAppIcon();
+
             resize();
             setTimeout(drawMenuBackground, 100);
         });
     </script>
 </body>
+</html>
 </html>
